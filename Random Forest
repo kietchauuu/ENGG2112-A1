@@ -1,0 +1,106 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils import resample
+
+# Step 1: Load both lifestyle and clinical datasets
+file_path = 'C:/Users/giach/OneDrive/Desktop/ENNG2112/'  # Your specific file path
+
+# Load lifestyle and clinical datasets
+lifestyle_dataset = pd.read_csv(file_path + 'lifestyle_dataset.csv')
+clinical_dataset = pd.read_csv(file_path + 'clinical_dataset.csv')
+
+# ------------------------------------------
+# Lifestyle Dataset Preparation
+# ------------------------------------------
+
+# Step 2: Split the 'Blood Pressure' column into 'Systolic_BP' and 'Diastolic_BP'
+blood_pressure_split = lifestyle_dataset['Blood Pressure'].str.split('/', expand=True)
+lifestyle_dataset['Systolic_BP'] = pd.to_numeric(blood_pressure_split[0], errors='coerce')
+lifestyle_dataset['Diastolic_BP'] = pd.to_numeric(blood_pressure_split[1], errors='coerce')
+
+# Drop the original 'Blood Pressure' column
+lifestyle_dataset = lifestyle_dataset.drop(columns=['Blood Pressure'])
+
+# Step 3: Separate numeric and categorical columns
+numeric_columns_lifestyle = ['Age', 'Cholesterol', 'Systolic_BP', 'Diastolic_BP', 'Heart Rate', 'Exercise Hours Per Week', 
+                   'Stress Level', 'Sedentary Hours Per Day', 'Income', 'BMI', 'Triglycerides', 
+                   'Physical Activity Days Per Week', 'Sleep Hours Per Day']
+categorical_columns_lifestyle = ['Sex', 'Diabetes', 'Smoking', 'Obesity', 'Alcohol Consumption', 'Diet', 
+                       'Country', 'Continent', 'Hemisphere']
+
+# Step 4: Handle missing values for numeric and categorical data
+imputer_numeric = SimpleImputer(strategy='mean')
+lifestyle_dataset[numeric_columns_lifestyle] = imputer_numeric.fit_transform(lifestyle_dataset[numeric_columns_lifestyle])
+
+imputer_categorical = SimpleImputer(strategy='most_frequent')
+lifestyle_dataset[categorical_columns_lifestyle] = imputer_categorical.fit_transform(lifestyle_dataset[categorical_columns_lifestyle])
+
+# Step 5: Convert categorical features using get_dummies
+lifestyle_dataset_encoded = pd.get_dummies(lifestyle_dataset, columns=categorical_columns_lifestyle, drop_first=True)
+
+# Step 6: Feature scaling for numeric columns
+scaler = StandardScaler()
+lifestyle_dataset_encoded[numeric_columns_lifestyle] = scaler.fit_transform(lifestyle_dataset_encoded[numeric_columns_lifestyle])
+
+# ------------------------------------------
+# Clinical Dataset Preparation
+# ------------------------------------------
+
+# Step 7: Clean the clinical dataset
+clinical_dataset_cleaned = clinical_dataset.dropna()
+
+# Remove any irrelevant columns such as 'Patient ID' if present
+lifestyle_dataset_encoded = lifestyle_dataset_encoded.drop(columns=['Patient ID'], errors='ignore')
+clinical_dataset_cleaned = clinical_dataset_cleaned.drop(columns=['Patient ID'], errors='ignore')
+
+# ------------------------------------------
+# Combine the two datasets
+# ------------------------------------------
+
+# Reset index for both datasets and concatenate them horizontally
+combined_dataset = pd.concat([clinical_dataset_cleaned.reset_index(drop=True), lifestyle_dataset_encoded.reset_index(drop=True)], axis=1)
+
+# Step 8: Define X (features) and y (target)
+X_combined = combined_dataset.drop(columns=['Heart Attack Risk', 'output'], errors='ignore')  # Drop target columns
+y_combined = combined_dataset['Heart Attack Risk'].fillna(combined_dataset['output'])  # Fill target using either column
+
+# ------------------------------------------
+# Balance the data by upsampling the minority class
+# ------------------------------------------
+
+X_upsampled, y_upsampled = resample(X_combined[y_combined == 1], y_combined[y_combined == 1], replace=True, n_samples=len(y_combined[y_combined == 0]), random_state=42)
+X_balanced = pd.concat([X_combined[y_combined == 0], X_upsampled])
+y_balanced = pd.concat([y_combined[y_combined == 0], y_upsampled])
+
+# ------------------------------------------
+# Split the data into training and testing sets
+# ------------------------------------------
+
+X_train_combined, X_test_combined, y_train_combined, y_test_combined = train_test_split(X_balanced, y_balanced, test_size=0.2, random_state=42)
+
+# ------------------------------------------
+# Train the Random Forest model on the combined dataset
+# ------------------------------------------
+
+rf_model_combined = RandomForestClassifier(n_estimators=200, random_state=42)
+rf_model_combined.fit(X_train_combined, y_train_combined)
+
+# ------------------------------------------
+# Make predictions and evaluate the model
+# ------------------------------------------
+
+y_pred_combined = rf_model_combined.predict(X_test_combined)
+accuracy_combined = accuracy_score(y_test_combined, y_pred_combined)
+classification_rep_combined = classification_report(y_test_combined, y_pred_combined)
+conf_matrix_combined = confusion_matrix(y_test_combined, y_pred_combined)
+
+# Print results
+print(f"Accuracy: {accuracy_combined * 100:.2f}%")
+print("\nClassification Report:")
+print(classification_rep_combined)
+print("\nConfusion Matrix:")
+print(conf_matrix_combined)
