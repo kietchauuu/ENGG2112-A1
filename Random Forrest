@@ -1,0 +1,72 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils import resample
+
+# Step 1: Load the lifestyle dataset
+file_path = 'C:/Users/giach/OneDrive/Desktop/ENNG2112/'  # Your specific file path
+lifestyle_dataset = pd.read_csv(file_path + 'lifestyle_dataset.csv')
+
+# Step 2: Split the 'Blood Pressure' column into 'Systolic_BP' and 'Diastolic_BP'
+blood_pressure_split = lifestyle_dataset['Blood Pressure'].str.split('/', expand=True)
+lifestyle_dataset['Systolic_BP'] = pd.to_numeric(blood_pressure_split[0], errors='coerce')
+lifestyle_dataset['Diastolic_BP'] = pd.to_numeric(blood_pressure_split[1], errors='coerce')
+
+# Drop the original 'Blood Pressure' column
+lifestyle_dataset = lifestyle_dataset.drop(columns=['Blood Pressure'])
+
+# Step 3: Separate numeric and categorical columns
+numeric_columns = ['Age', 'Cholesterol', 'Systolic_BP', 'Diastolic_BP', 'Heart Rate', 'Exercise Hours Per Week', 
+                   'Stress Level', 'Sedentary Hours Per Day', 'Income', 'BMI', 'Triglycerides', 
+                   'Physical Activity Days Per Week', 'Sleep Hours Per Day']
+categorical_columns = ['Sex', 'Diabetes', 'Smoking', 'Obesity', 'Alcohol Consumption', 'Diet', 
+                       'Country', 'Continent', 'Hemisphere']
+
+# Step 4: Handle missing values separately for numeric and categorical data
+# For numeric columns: Mean imputation
+imputer_numeric = SimpleImputer(strategy='mean')
+lifestyle_dataset[numeric_columns] = imputer_numeric.fit_transform(lifestyle_dataset[numeric_columns])
+
+# For categorical columns: Impute with most frequent value
+imputer_categorical = SimpleImputer(strategy='most_frequent')
+lifestyle_dataset[categorical_columns] = imputer_categorical.fit_transform(lifestyle_dataset[categorical_columns])
+
+# Step 5: Convert categorical features using get_dummies
+lifestyle_dataset_encoded = pd.get_dummies(lifestyle_dataset, columns=categorical_columns, drop_first=True)
+
+# Step 6: Feature scaling for numeric columns
+scaler = StandardScaler()
+lifestyle_dataset_encoded[numeric_columns] = scaler.fit_transform(lifestyle_dataset_encoded[numeric_columns])
+
+# Step 7: Separate features (X) and target (y)
+X = lifestyle_dataset_encoded.drop(columns=['Heart Attack Risk', 'Patient ID'])
+y = lifestyle_dataset_encoded['Heart Attack Risk']
+
+# Step 8: Upsample the minority class (if class imbalance is present)
+X_upsampled, y_upsampled = resample(X[y == 1], y[y == 1], replace=True, n_samples=len(y[y == 0]), random_state=42)
+X_balanced = pd.concat([X[y == 0], X_upsampled])
+y_balanced = pd.concat([y[y == 0], y_upsampled])
+
+# Step 9: Split the data into training and testing sets (80% train, 20% test)
+X_train, X_test, y_train, y_test = train_test_split(X_balanced, y_balanced, test_size=0.2, random_state=42)
+
+# Step 10: Initialize and train the Random Forest model with more trees
+rf_model = RandomForestClassifier(n_estimators=200, random_state=42)
+rf_model.fit(X_train, y_train)
+
+# Step 11: Make predictions and evaluate the model
+y_pred = rf_model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+classification_rep = classification_report(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+
+# Step 12: Print results
+print(f"Accuracy: {accuracy * 100:.2f}%")
+print("\nClassification Report:")
+print(classification_rep)
+print("\nConfusion Matrix:")
+print(conf_matrix)
+
